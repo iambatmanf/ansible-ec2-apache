@@ -1,0 +1,84 @@
+---
+- name: Create Ubuntu EC2 (Controller Side)
+  hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars:
+    key_name: ubuntu-slave-key
+    instance_type: t3.micro
+    image_id: ami-02e2d51e863c5c870   # Ubuntu 24.04 us-east-1
+    region: us-east-1
+    subnet_id: subnet-0906ab9c3e0837f1e
+    security_group_id: sg-040d352edbb19f1c6
+    ansible_user: ubuntu
+    private_key_path: ubuntu-slave-key.pem
+
+  tasks:
+    - name: Launch Ubuntu EC2
+      amazon.aws.ec2_instance:
+        name: ubuntu-slave
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ image_id }}"
+        region: "{{ region }}"
+        vpc_subnet_id: "{{ subnet_id }}"
+        security_groups:
+          - "{{ security_group_id }}"
+        wait: yes
+        state: present
+      register: ec2
+
+    - name: Wait for SSH
+      pause:
+        seconds: 30
+
+    - name: Add EC2 to inventory
+      add_host:
+        name: webserver
+        ansible_host: "{{ ec2.instances[0].public_ip_address }}"
+        ansible_user: "{{ ansible_user }}"
+        ansible_ssh_private_key_file: "{{ private_key_path }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        groups: web
+
+    - name: Show Public IP
+      debug:
+        msg: "Web Server IP = {{ ec2.instances[0].public_ip_address }}"
+
+
+# ================== SECOND PLAY ==================
+
+- name: Install and Configure Apache (EC2 Side)
+  hosts: web
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install Apache
+      apt:
+        name: apache2
+        state: present
+
+    - name: Start and Enable Apache
+      service:
+        name: apache2
+        state: started
+        enabled: yes
+
+    - name: Create test web page
+      copy:
+        dest: /var/www/html/index.html
+        content: |
+          <html>
+          <head><title>Ansible Apache</title></head>
+          <body>
+            <h1>Apache Installed using Ansible 🎉</h1>
+            <p>Server is working!</p>
+          </body>
+          </html>
+
