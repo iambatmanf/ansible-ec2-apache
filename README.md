@@ -1,4 +1,4 @@
-# Ansible EC3 Apache Automation
+# Ansible EC2 Apache Automation
 
 This project automates:
 - EC2 instance creation on AWS
